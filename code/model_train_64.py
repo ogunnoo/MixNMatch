@@ -136,9 +136,9 @@ class PARENT_STAGE(nn.Module):
         # 16*64*64
         """Removed self.upsample5 and changed the output filter to 32"""
 
-        self.jointConv = sameBlock( cfg.SUPER_CATEGORIES+ngf//8, ngf//8 )
+        self.jointConv = sameBlock( cfg.SUPER_CATEGORIES+ngf//32, ngf//32 )
         # (16+20)*64*64 --> 16*64*64
-        self.residual = self._make_layer(3, ngf//8)
+        self.residual = self._make_layer(3, ngf//32)
         # 16*64*64
 
     def _make_layer(self,num_residual,ngf):
@@ -159,7 +159,7 @@ class PARENT_STAGE(nn.Module):
 
             h, w  = out_code.size(2),out_code.size(3)
             input = input.view(-1, self.code_len, 1, 1).repeat(1, 1, h, w) 
-            out_code = torch.cat( (out_code, input), dim=1)       
+            out_code = torch.cat( (out_code, input), dim=1) 
             out_code = self.jointConv(out_code)
             out_code = self.residual(out_code)
             return out_code
@@ -328,7 +328,7 @@ class CHILD_D(nn.Module):
                                         nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
                                         nn.BatchNorm2d(ndf * 8),
                                         nn.LeakyReLU(0.2, inplace=True),
-                                        nn.Conv2d(ndf * 8, ndf * 8, 4, 2, 1, bias=False),
+                                        nn.Conv2d(ndf * 8, ndf * 8, 3, 1, 1, bias=False),
                                         nn.BatchNorm2d(ndf * 8),
                                         nn.LeakyReLU(0.2, inplace=True),
                                         nn.Conv2d(ndf * 8, ndf * 8, 3, 1, 1, bias=False),
@@ -534,7 +534,7 @@ class Viewer(nn.Module):
 class Bi_Dis_base(nn.Module):
     def __init__(self, code_len, ngf=16):
         super(Bi_Dis_base, self).__init__()
-   
+        
         self.image_layer = nn.Sequential(  Conv_Block( 3,     ngf, 4,2,1, bn=False, activation='leaky', noise=False, std=0.3),
                                              Conv_Block( ngf,   ngf*2, 4,2,1, bn=False, activation='leaky', noise=False, std=0.5),
                                              Conv_Block( ngf*2, ngf*4, 4,2,1, bn=False, activation='leaky', noise=False, std=0.5),
@@ -542,6 +542,15 @@ class Bi_Dis_base(nn.Module):
                                              Conv_Block( ngf*8, ngf*16, 4,2,1, bn=False, activation='leaky', noise=False, std=0.5),
                                              Conv_Block( ngf*16, 512, 4,1,0, bn=False, activation='leaky', noise=False, std=0.5),
                                              Viewer( [-1,512] ) )
+
+        self.image_layer_64 = nn.Sequential(  Conv_Block( 3,     ngf, 4,2,1, bn=False, activation='leaky', noise=False, std=0.3),
+                                             Conv_Block( ngf,   ngf*2, 4,2,1, bn=False, activation='leaky', noise=False, std=0.5),
+                                             Conv_Block( ngf*2, ngf*4, 4,2,1, bn=False, activation='leaky', noise=False, std=0.5),
+                                             Conv_Block( ngf*4, ngf*8, 4,2,1, bn=False, activation='leaky', noise=False, std=0.5),
+                                             Conv_Block( ngf*8, ngf*16, 3,1,1, bn=False, activation='leaky', noise=False, std=0.5),
+                                             Conv_Block( ngf*16, 512, 4,1,0, bn=False, activation='leaky', noise=False, std=0.5),
+                                             Viewer( [-1,512] ) )
+        
         
         self.code_layer = nn.Sequential( Linear_Block( code_len, 512, bn=False, activation='leaky', noise=True, std=0.5  ),
                                            Linear_Block( 512, 512, bn=False, activation='leaky', noise=True, std=0.3  ),
@@ -552,7 +561,11 @@ class Bi_Dis_base(nn.Module):
                                      Viewer([-1]) )
 
     def forward(self, img, code ):
-        t1 = self.image_layer(img)
+
+        if img.shape[2] ==64:
+            t1 = self.image_layer_64(img)
+        else:
+            t1 = self.image_layer(img)         
         t2 = self.code_layer( code )
         return  self.joint(  torch.cat( [t1,t2],dim=1) )
 
@@ -597,80 +610,90 @@ def BottleNeck(in_c, out_c):
 def Down_unet(in_c, out_c):
     return nn.Sequential(  nn.Conv2d(in_c, out_c*2, 4,2,1), nn.BatchNorm2d(out_c*2), GLU()   )
 class FeatureExtractor(nn.Module):
-    def __init__(self,in_c, out_c):
+    def __init__(self, in_c, out_c):
         super().__init__()
 
-        self.first = nn.Sequential( sameBlock(in_c, 32), sameBlock(32, 32) )
-        
+        self.first = nn.Sequential(sameBlock(in_c, 32), sameBlock(32, 32))
+
         self.down1 = Down_unet(32, 32)
-        # 32*64*64
-        self.down2 = Down_unet(32,64)
-        # 64*32*32
-        self.down3 = Down_unet(64,128)
-        # 128*16*16
-        self.down4 = Down_unet(128,256)
-        # 256*8*8
-        self.down5 = Down_unet(256,512)
-        # 512*4*4
-        self.down6 =  Down_unet(512,512)
-        # 512*2*2
-        
-        self.up1 = Up_unet(512,256)
+        # 32*32*32
+        self.down2 = Down_unet(32, 64)
+        # 64*16*16
+        self.down3 = Down_unet(64, 128)
+        # 128*8*8
+        self.down4 = Down_unet(128, 256)
         # 256*4*4
-        self.up2 = Up_unet(256+512,512)
-        # 256*8*8 #I believe this should be 512*8*8
-        self.up3 = Up_unet(512+256,256)
-        # 256*16*16
-        self.up4 = Up_unet(256+128,128)
-        # 128*32*32
-        self.up5 = Up_unet(128+64,64)
-        # 64*64*64
-        self.up6 = nn.Sequential(sameBlock(64+32, out_c*2),
-                                 nn.BatchNorm2d(out_c*2), GLU())#Up_unet(64+32,out_c)
-        """Changed the Upsample for the last layer to a sameBlock to return out_c*64*64"""
-        # out_c*128*128
-        
-        self.last = nn.Sequential( ResBlock(out_c),ResBlock(out_c) )
-        
-    def forward(self ,x):
+        self.down5 = Down_unet(256, 512)
+        # 512*2*2
+        self.down6 = Down_unet(512, 512)
+        # 512*1*1
+
+        self.up1 = Up_unet(512, 256)
+        # 256*2*2
+        self.up2 = Up_unet(256 + 512, 512)
+        # 256*4*4
+        self.up3 = Up_unet(512 + 256, 256)
+        # 256*8*8
+        self.up4 = Up_unet(256 + 128, 128)
+        # 128*16*16
+        self.up5 = Up_unet(128 + 64, 64)
+        # 64*32*32
+        self.up6 = Up_unet(64 + 32, out_c)
+        # out_c*64*64
+
+        self.last = nn.Sequential(ResBlock(out_c), ResBlock(out_c))
+
+    def forward(self, x):
 
         x = self.first(x)
-        
+
         x1 = self.down1(x)
         x2 = self.down2(x1)
         x3 = self.down3(x2)
         x4 = self.down4(x3)
         x5 = self.down5(x4)
-        
-        x =  self.up1( self.down6(x5) )
 
-        
-        x = self.up2(  torch.cat([x,x5], dim=1) )
-        x = self.up3(  torch.cat([x,x4], dim=1) )
-        x = self.up4(  torch.cat([x,x3], dim=1) )
-        x = self.up5(  torch.cat([x,x2], dim=1) )
-        x = self.up6(  torch.cat([x,x1], dim=1) )
-        
+        x = self.up1(self.down6(x5))
+
+        x = self.up2(torch.cat([x, x5], dim=1))
+        x = self.up3(torch.cat([x, x4], dim=1))
+        x = self.up4(torch.cat([x, x3], dim=1))
+        x = self.up5(torch.cat([x, x2], dim=1))
+        x = self.up6(torch.cat([x, x1], dim=1))
+
         return self.last(x)
-        
-        
-        
-                       
-                
 
 
 class Dis_Dis(nn.Module):
-    def __init__(self, in_c ):
+    def __init__(self, in_c):
         super().__init__()
-        self.encode_img = nn.Sequential( nn.Conv2d(in_c, 32, 4, 2, 0, bias=False),
-                                    nn.LeakyReLU(0.2, inplace=True),
-                                    nn.Conv2d(32, 64, 4, 2, 0, bias=False),
-                                    nn.LeakyReLU(0.2, inplace=True),
-                                    nn.Conv2d(64, 128, 4, 1, 0, bias=False),
-                                    nn.LeakyReLU(0.2, inplace=True) ) 
-        self.rf_logits = nn.Sequential( nn.Conv2d(128, 1, kernel_size=4, stride=1), nn.Sigmoid() )
+        self.encode_img = nn.Sequential(
+            nn.Conv2d(in_c, 32, 4, 2, 0, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(32, 64, 4, 2, 0, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 128, 4, 1, 0, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+        self.encode_img_64 = nn.Sequential(
+            nn.Conv2d(in_c, 32, 3, 1, 1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(32, 64, 4, 2, 0, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 128, 4, 1, 0, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+
+        self.rf_logits = nn.Sequential(
+            nn.Conv2d(128, 1, kernel_size=4, stride=1), nn.Sigmoid()
+        )
+
     def forward(self, x):
-        x = F.interpolate( x, [126,126], mode='bilinear', align_corners=True )
-        x = self.encode_img(x)
-        return  self.rf_logits(x)  
-        
+        if x.shape[2] == 64:
+            x = F.interpolate(x, [62, 62], mode="bilinear", align_corners=True)
+            x = self.encode_img_64(x)
+
+        else:
+            x = F.interpolate(x, [126, 126], mode="bilinear", align_corners=True)
+            x = self.encode_img(x)
+        return self.rf_logits(x)
