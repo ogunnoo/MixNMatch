@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision.utils as vutils
 from model_train_64 import G_NET, BACKGROUND_D, PARENT_D, CHILD_D, Encoder, Bi_Dis
-from datasets import get_dataloader
+from dataset_64 import get_dataloader
 import random
 from utils import *
 from itertools import chain
