@@ -96,7 +96,7 @@ def get_imgs(img_path, imsize, bbox=None, transform=None, normalize=None):
 
 
 class Dataset(data.Dataset):
-    def __init__(self, data_dir, base_size=64, transform=None):
+    def __init__(self, data_dir, base_size=32, transform=None):
 
         self.transform = transform
         self.norm = transforms.Compose([

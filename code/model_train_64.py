@@ -297,7 +297,7 @@ class PARENT_D(nn.Module):
                                             nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
                                             nn.BatchNorm2d(ndf * 8),
                                             nn.LeakyReLU(0.2, inplace=True),
-                                            nn.Conv2d(ndf * 8, ndf * 8, 4, 2, 1, bias=False),
+                                            nn.Conv2d(ndf * 8, ndf * 8, 3, 1, 1, bias=False),
                                             nn.BatchNorm2d(ndf * 8),
                                             nn.LeakyReLU(0.2, inplace=True),
                                             nn.Conv2d(ndf * 8, ndf * 8, 3, 1, 1, bias=False),
@@ -356,7 +356,7 @@ def encode_parent_and_child_img(ndf, in_c=3):
         nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
         nn.BatchNorm2d(ndf * 4),
         nn.LeakyReLU(0.2, inplace=True),
-        nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
+        nn.Conv2d(ndf * 4, ndf * 8, 3, 1, 1, bias=False),
         nn.BatchNorm2d(ndf * 8),
         nn.LeakyReLU(0.2, inplace=True)
     )
